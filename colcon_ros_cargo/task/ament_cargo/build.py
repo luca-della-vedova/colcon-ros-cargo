@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+import sys
 
 from colcon_cargo.task.cargo import CARGO_EXECUTABLE
 from colcon_cargo.task.cargo.build import CargoBuildTask
@@ -89,6 +90,10 @@ class AmentCargoBuildTask(CargoBuildTask):
             '--quiet'
         ] + cargo_args
 
+    # Installation is done by cargo ament-build
+    def _install_cmd(self, cargo_args):  # noqa: D102
+        pass
+
 
 def write_cargo_config_toml(package_paths):
     """Write the resolved package paths to config.toml.
@@ -100,8 +105,17 @@ def write_cargo_config_toml(package_paths):
     config_dir = Path.cwd() / '.cargo'
     config_dir.mkdir(exist_ok=True)
     cargo_config_toml_out = config_dir / 'config.toml'
-    cargo_config_toml_out.unlink(missing_ok=True)
-    toml.dump(content, cargo_config_toml_out.open('w'))
+    # missing_ok flag was introduced in Python 3.8, older versions
+    # raise a FileNotFoundError exception
+    if sys.version_info.minor >= 8:
+        cargo_config_toml_out.unlink(missing_ok=True)
+    else:
+        try:
+            cargo_config_toml_out.unlink()
+        except FileNotFoundError:
+            pass
+    with cargo_config_toml_out.open('w') as toml_file:
+        toml.dump(content, toml_file)
 
 
 def find_installed_cargo_packages(env):
@@ -114,8 +128,8 @@ def find_installed_cargo_packages(env):
     prefix_for_package = {}
     ament_prefix_path_var = env.get('AMENT_PREFIX_PATH')
     if ament_prefix_path_var is None:
-        logger.warn('AMENT_PREFIX_PATH is empty. '
-                    'You probably intended to source a ROS installation.')
+        logger.warning('AMENT_PREFIX_PATH is empty. '
+                       'You probably intended to source a ROS installation.')
         prefixes = []
     else:
         prefixes = ament_prefix_path_var.split(os.pathsep)
